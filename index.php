@@ -8,5 +8,8 @@
  * Author: Tomas M.
  */
 
-define("FWE_PLUGIN_URL", dirname(__FILE__));
-include_once(FWE_PLUGIN_URL . "/includes/class-fwe-builder.php");
+     define("FWE_PLUGIN_URL", dirname(__FILE__));
+     include_once(FWE_PLUGIN_URL . "/includes/constants.php");
+     include_once(FWE_PLUGIN_URL . "/includes/class-fwe-functions.php");
+     include_once(FWE_PLUGIN_URL . "/includes/class-fwe-builder.php");
+

@@ -35,89 +35,119 @@ jQuery(document).ready(function ($) {
     });
   });
 
-  $(document.body).on("click", ".fmwp-topic-popup-submit", function (e) {
-    e.preventDefault();
+  if (document.querySelector(".fmwp-topic-popup-submit")) {
+    $(document.body).on("click", ".fmwp-topic-popup-submit", function (e) {
+      e.preventDefault();
+      //console.log("test1");
+      if (fmwp_is_busy("topic_popup")) {
+        return;
+      }
 
-    if (fmwp_is_busy("topic_popup")) {
-      return;
-    }
+      var obj = $(this);
 
-    var obj = $(this);
+      obj.siblings(".fmwp-ajax-loading").css("visibility", "visible").show();
+      obj.css("visibility", "hidden");
 
-    obj.siblings(".fmwp-ajax-loading").css("visibility", "visible").show();
-    obj.css("visibility", "hidden");
+      var popup = $("#fmwp-topic-popup-wrapper");
+      var form = $(this).parents("form");
+      var serialize_data = form.serializeArray();
 
-    var popup = $("#fmwp-topic-popup-wrapper");
-    var form = $(this).parents("form");
-    var serialize_data = form.serializeArray();
+      var data = {};
+      $.each(serialize_data, function (i) {
+        data[serialize_data[i].name] = serialize_data[i].value;
+      });
 
-    var data = {};
-    $.each(serialize_data, function (i) {
-      data[serialize_data[i].name] = serialize_data[i].value;
-    });
+      var forum_id = data["fmwp-topic[forum_id]"];
+      var topic_id = data["fmwp-topic[topic_id]"];
 
-    var forum_id = data["fmwp-topic[forum_id]"];
-    var topic_id = data["fmwp-topic[topic_id]"];
+      var ajax_action =
+        data["fmwp-action"] === "edit-topic"
+          ? "fmwp_edit_topic"
+          : "fmwp_create_topic";
+      form
+        .find("input, #wp-fmwptopiccontent-wrap")
+        .removeClass("fmwp-error-field")
+        .removeAttr("title");
 
-    var ajax_action =
-      data["fmwp-action"] === "edit-topic"
-        ? "fmwp_edit_topic"
-        : "fmwp_create_topic";
+      var formData = new FormData(form[0]);
+      formData.append("action", ajax_action);
+      formData.set("nonce", ajaxvars.nonce);
 
-    form
-      .find("input, #wp-fmwptopiccontent-wrap")
-      .removeClass("fmwp-error-field")
-      .removeAttr("title");
+      if ((window.topicFiles || []).length >= 1)
+        window.topicFiles.forEach(
+          (f) => !f.server && formData.append("files[]", f.file)
+        );
 
-    var formData = new FormData(form[0]);
-    formData.append("action", ajax_action);
-    fmwp_set_busy("topic_popup", true);
-    $.ajax({
-      url: ajaxvars.ajaxurl,
-      type: "POST",
-      data: formData,
-      async: true,
-      cache: false,
-      contentType: false,
-      enctype: "multipart/form-data",
-      processData: false,
-      success: function (data) {
-        if (!data.success) {
-          if (data.data?.errors) {
-            $.each(data.data.errors, function (i) {
-              jQuery("#" + data.data.errors[i].field)
-                .addClass("fmwp-error-field")
-                .attr("title", data.data.errors[i].message);
-            });
-          } else {
-            $(this).fmwp_notice({
-              message: data.data,
-              type: "error",
-            });
+      formData.set(
+        "toDelete",
+        JSON.stringify(
+          window.topicFiles.filter((f) => f.toDelete).map((f) => f.file)
+        )
+      );
+      fmwp_set_busy("topic_popup", true);
+      $.ajax({
+        url: ajaxvars.ajaxurl,
+        type: "POST",
+        data: formData,
+        async: true,
+        cache: false,
+        contentType: false,
+        enctype: "multipart/form-data",
+        processData: false,
+        success: function (data) {
+          if (!data.success) {
+            if (data.data?.errors) {
+              $.each(data.data.errors, function (i) {
+                jQuery("#" + data.data.errors[i].field)
+                  .addClass("fmwp-error-field")
+                  .attr("title", data.data.errors[i].message);
+              });
+            } else {
+              $(this).fmwp_notice({
+                message: data.data,
+                type: "error",
+              });
+            }
+            fmwp_set_busy("topic_popup", false);
+
+            obj.siblings(".fmwp-ajax-loading").css("visibility", "hidden");
+            obj.css("visibility", "visible");
+
+            return;
           }
-          fmwp_set_busy("topic_popup", false);
+          if (data.data) data = data.data;
+          if (ajax_action === "fmwp_edit_topic") {
+            var target = popup.data("fmwp-target");
+
+            fmwp_edit_topic_cb(data, forum_id, topic_id, target);
+          } else {
+            fmwp_create_topic_cb(data, forum_id);
+          }
 
           obj.siblings(".fmwp-ajax-loading").css("visibility", "hidden");
           obj.css("visibility", "visible");
-          return;
-        }
-        if (data.data) data = data.data;
-        if (ajax_action === "fmwp_edit_topic") {
-          var target = popup.data("fmwp-target");
+          form[0].querySelector("#fileElem").value = "";
+          if (ajax_action == "fmwp_edit_topic") {
+            const topicId = document
+              .querySelector(".fmwp-topic-base")
+              .getAttribute("data-topic_id");
+            setFilesFromServer(form[0].querySelector(".gallery"), topicId);
+            const content = document.querySelector(".fmwp-topic-data-content");
+            displayUploadedFiles(content, topicId);
+          }
+        },
 
-          fmwp_edit_topic_cb(data, forum_id, topic_id, target);
-        } else {
-          fmwp_create_topic_cb(data, forum_id);
-        }
-
-        obj.siblings(".fmwp-ajax-loading").css("visibility", "hidden");
-        obj.css("visibility", "visible");
-      },
+        error: function (error) {
+          console.error(error);
+          alert("an error has ocurred");
+          obj.siblings(".fmwp-ajax-loading").css("visibility", "hidden");
+          obj.css("visibility", "visible");
+        },
+      });
     });
-  });
+  }
 
   function fmwp_create_topic_cb(data, forum_id) {
-    console.log;
     var post_template = wp.template("fmwp-topic");
     var layout = post_template(data);
 
